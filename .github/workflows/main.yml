@@ -1,19 +1,32 @@
-name: GitHub Actions Demo
-run-name: ${{ github.actor }} is testing out GitHub Actions
+name: CI/CD Pipeline
 
-on: [push]
+on:
+  push:
+    branches: [main]
 
 jobs:
-  Explore-GitHub-Actions:
+  test:
     runs-on: ubuntu-latest
     steps:
-      - run: echo "The job was triggered by a ${{ github.event_name }} event."
-      - run: echo "The job is running on ${{ runner.os }}."
-      - run: echo "The branch is ${{ github.ref }} and the repository is ${{ github.repository }}."
-      - name: Check out repository code
-        uses: actions/checkout@v4
-      - run: echo "The repository has been cloned to the runner."
-      - name: List files in the repository
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci
+      - name: Run tests
+        run: npm test -- --watchAll=false --passWithNoTests
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build inside a container
         run: |
-          ls ${{ github.workspace }}
-      - run: echo "This job's status is ${{ job.status }}."
+          docker build -f Dockerfile.prod --target build -t app-build .
+          docker create --name extract app-build
+          docker cp extract:/app/build ./build
+      - run: npm install -g firebase-tools
+      - name: Deploy to Firebase Hosting
+        run: firebase deploy --only hosting --token "${{ secrets.FIREBASE_TOKEN }}"
